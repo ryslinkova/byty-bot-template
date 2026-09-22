@@ -1,0 +1,2 @@
+# No third-party dependencies — the bot runs on the Python standard library only
+# (urllib, json, re, sqlite3, smtplib, email). Nothing to install.

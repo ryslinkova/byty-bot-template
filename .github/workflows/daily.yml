@@ -1,0 +1,55 @@
+name: Denní přehled bytů
+
+on:
+  schedule:
+    # 05:00 a 17:00 UTC = 07:00 a 19:00 v létě (CEST),
+    # 06:00 a 18:00 v zimě (CET).
+    - cron: "0 5,17 * * *"
+  workflow_dispatch: {}   # umožní spustit ručně tlačítkem v záložce Actions
+
+# Potřeba pro ukládání dedup DB jako Release asset.
+permissions:
+  contents: write
+
+concurrency:
+  group: byty-bot-daily
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      # Dedup databáze (seen.db) přežívá mezi běhy jako asset v releasu "db-store".
+      # GitHub Actions nemá perzistentní disk, tohle je náhrada.
+      - name: Obnov dedup DB z releasu
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download db-store --pattern seen.db --dir . || echo "Zatím žádná DB — startuji načisto."
+
+      - name: Spusť bota (pošle e-mail s novými inzeráty)
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          REPORT_RECIPIENT: ${{ secrets.REPORT_RECIPIENT }}
+        run: python3 main.py
+
+      # Ulož DB i při selhání běhu, ať se nepřijde o stav už zpracovaných inzerátů.
+      - name: Ulož dedup DB do releasu
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f seen.db ]; then
+            gh release view db-store >/dev/null 2>&1 || \
+              gh release create db-store --title "DB store" \
+                --notes "Dedup databáze (zpracované inzeráty). NEMAZAT."
+            gh release upload db-store seen.db --clobber
+          else
+            echo "seen.db neexistuje — není co ukládat."
+          fi
