@@ -15,8 +15,10 @@ ať to funguje i v nástrojích, které hledají vlastní jméno souboru.
   Přístupové údaje patří jen do `.env` (lokálně, je v `.gitignore`) nebo do GitHub Secrets.
   Když uživatel napíše App Password do chatu, ulož ho do `.env` a upozorni,
   že si ho má v chatu považovat za prozrazený a případně vygenerovat nový.
-- **Necommituj za uživatele do cizího repa.** Tohle repo je sdílená šablona;
-  když si chce dělat vlastní úpravy, ať si udělá fork nebo vlastní repozitář.
+- **Necommituj ani nepushuj do repa šablony.** Tohle repo je sdílená šablona
+  (`ryslinkova/byty-bot-template`). Uživatel ho nemá upravovat přímo — nejdřív si z něj
+  udělá vlastní fork (viz „Krok 0"). Před jakýmkoli `git push` ověř přes
+  `git remote -v`, že `origin` míří na uživatelův vlastní fork, ne na šablonu.
 - Mluv česky, pokud uživatel nezačne jinak.
 - Než něco spustíš, řekni jednou větou co to udělá a zda to něco odešle.
 
@@ -32,6 +34,25 @@ Soubory: `main.py` (orchestrace) · `config.py` (veškeré nastavení) ·
 `dedup.py` (`seen.db`) · `geo.py` (vzdálenost) · `models.py` (datový model).
 
 ## Průvodce nastavením — pořadí kroků
+
+### 0. Vlastní fork šablony
+Když `git remote -v` ukazuje `ryslinkova/byty-bot-template` jako `origin`, uživatel je
+v šabloně a musí si z ní udělat vlastní fork. Nastavení (secrets, Actions, `config.py`)
+patří do jeho forku.
+
+1. Zjisti, zda má `gh` (`gh auth status`). Když ne, pošli ho na <https://cli.github.com>
+   a nech ho přihlásit (`gh auth login`).
+2. Forkni šablonu na jeho účet a stáhni ji:
+   ```bash
+   gh repo fork ryslinkova/byty-bot-template --clone
+   cd byty-bot-template
+   git remote -v   # origin = jeho fork, upstream = šablona
+   ```
+   (Bez `gh`: na stránce šablony tlačítko **Fork**, pak `git clone` svého forku.)
+3. Od teď pracuj jen v jeho forku. Fork zůstane soukromý, pokud je soukromá šablona.
+4. Novější verzi šablony si stáhne přes `gh repo sync` (nebo tlačítkem **Sync fork**
+   na GitHubu). Před syncem řekni, že se může přepsat jeho `config.py`, pokud se
+   změnil i v šabloně — případný konflikt vyřeš s ním.
 
 ### 1. Python
 Ověř `python3 --version` (potřeba 3.12+; na Windows zkus i `python --version` a `py -3 --version`).
@@ -94,8 +115,8 @@ Odešle mail **a zapíše inzeráty do `seen.db`** — podruhé už se stejné n
 ### 7. Automatický provoz (nepovinné, ale o to většinou jde)
 Bez tohohle si musí bota pouštět ručně. Přes GitHub Actions poběží sám dvakrát denně.
 
-1. Uživatel potřebuje **vlastní repozitář** na svém GitHub účtu — fork téhle šablony,
-   nebo nové repo, do kterého nahraje tyhle soubory. Do cizího repa secrets nastavit nemůže.
+1. Uživatel potřebuje **vlastní fork** na svém GitHub účtu — ten z kroku 0.
+   Do repa šablony secrets nastavit nemůže.
 2. V jeho repu: **Settings → Secrets and variables → Actions → New repository secret**,
    třikrát: `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `REPORT_RECIPIENT`.
    (Stejné hodnoty jako v `.env`. `.env` se do GitHubu nenahrává.)
