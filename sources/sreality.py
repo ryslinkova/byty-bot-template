@@ -7,9 +7,9 @@ search page — the same URL a browser hits — and read the `estatesSearch` res
 out of that blob. No API key, no headless browser; plain HTTP + a regex.
 
 URL grammar (verified live):
-  base:        https://www.sreality.cz/hledani/prodej/byty
+  base:        https://www.sreality.cz/hledani/{prodej|pronajem}/{byty|domy|chaty|pozemky}
   locality:    /{okres-slug}        e.g. /cheb  (in the path, one per request)
-  disposition: ?velikost=3%2Bkk&velikost=3%2B1  (optional)
+  disposition: ?velikost=3%2Bkk,3%2B1  (optional, byty only; ONE comma-separated param)
   max price:   &cena-do=5000000     (optional)
   pagination:  &strana=N
 """
@@ -23,7 +23,7 @@ import urllib.error
 import urllib.request
 from typing import Optional
 
-from config import DISPOSITIONS, MAX_PRICE_CZK, OKRESY, PROPERTY_TYPES
+from config import DISPOSITIONS, MAX_PRICE_CZK, OFFER_TYPE, OKRESY, PROPERTY_TYPES
 from models import Listing
 
 # Sreality search/detail path segments per property category.
@@ -32,9 +32,14 @@ _PROP_PATHS = {
     "byty": ("byty", "byt"),
     "domy": ("domy", "dum"),
     "chaty": ("chaty", "dum"),
+    "pozemky": ("pozemky", "pozemek"),
 }
-SEARCH_ROOT = "https://www.sreality.cz/hledani/prodej"
-DETAIL_ROOT = "https://www.sreality.cz/detail/prodej"
+SEARCH_ROOT = f"https://www.sreality.cz/hledani/{OFFER_TYPE}"
+DETAIL_ROOT = f"https://www.sreality.cz/detail/{OFFER_TYPE}"
+
+# priceUnitCb value for "za m²": Sreality lists land at a per-m² price in
+# `priceCzk`; the whole price is then only in `priceSummaryCzk`.
+_UNIT_PER_M2 = 3
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 PER_PAGE = 22
@@ -63,7 +68,7 @@ def _search_url(prop: str, okres: str, page: int) -> str:
     search_slug, _ = _PROP_PATHS[prop]
     url = f"{SEARCH_ROOT}/{search_slug}/{okres}"
     qs: list[str] = []
-    if _velikost_qs():
+    if prop == "byty" and _velikost_qs():
         qs.append(_velikost_qs())
     if MAX_PRICE_CZK is not None:
         qs.append(f"cena-do={MAX_PRICE_CZK}")
@@ -141,7 +146,9 @@ def _parse_item(item: dict, detail_slug: str) -> Optional[Listing]:
     sub = item.get("categorySubCb") or {}
     disp = sub.get("name") if isinstance(sub, dict) else None
 
-    price = item.get("priceCzk")
+    unit = item.get("priceUnitCb")
+    per_m2 = isinstance(unit, dict) and unit.get("value") == _UNIT_PER_M2
+    price = None if per_m2 else item.get("priceCzk")
     if not isinstance(price, (int, float)):
         price = item.get("priceSummaryCzk")
 
@@ -161,7 +168,7 @@ def _parse_item(item: dict, detail_slug: str) -> Optional[Listing]:
     return Listing(
         source="sreality",
         listing_id=f"sreality:{item['id']}",
-        title=name or "Byt k prodeji",
+        title=name or "Nemovitost",
         price_czk=int(price) if isinstance(price, (int, float)) else None,
         disposition=disp or "",
         area_m2=area,
@@ -207,7 +214,9 @@ def fetch_listings(verbose: bool = False) -> list[Listing]:
                             print(f"  ! skipping malformed item: {e}")
                         lst = None
                     if lst and lst.listing_id not in seen:
-                        if DISPOSITIONS and lst.disposition not in DISPOSITIONS:
+                        lst.offer, lst.property_type = OFFER_TYPE, prop
+                        if (prop == "byty" and DISPOSITIONS
+                                and lst.disposition not in DISPOSITIONS):
                             continue
                         if (MAX_PRICE_CZK is not None and lst.price_czk is not None
                                 and lst.price_czk > MAX_PRICE_CZK):

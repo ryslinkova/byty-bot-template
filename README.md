@@ -1,8 +1,9 @@
 # byty-bot
 
-Bot, který dvakrát denně projde inzeráty **prodeje nemovitostí** v zadané oblasti
+Bot, který dvakrát denně projde inzeráty **prodeje nebo pronájmu nemovitostí** v zadané oblasti
 a pošle e-mail jen s **novými** nabídkami. Vše se nastavuje v `config.py`
-(defaultně: byty/domy/chaty do 15 km od Písku, do 6 mil. Kč, od 40 m²).
+(defaultně: prodej bytů/domů/chat do 15 km od Písku, do 6 mil. Kč, od 40 m²;
+volitelně i pozemky nebo pronájem).
 
 Bez závislostí — čistá standardní knihovna Pythonu (3.12+).
 
@@ -55,7 +56,10 @@ python3 -m unittest discover -s tests -t .   # testy
 
 Vše na jednom místě v `config.py`:
 
-- `PROPERTY_TYPES`, `DISPOSITIONS`, `MAX_PRICE_CZK`, `MIN_AREA_M2` — co hledat
+- `OFFER_TYPE` — `"prodej"` nebo `"pronajem"` (jedno nastavení na bota; chceš-li obojí, pusť si dvě kopie)
+- `PROPERTY_TYPES` — libovolná kombinace `byty`, `domy`, `chaty`, `pozemky`
+- `DISPOSITIONS` (jen pro byty), `MAX_PRICE_CZK` (u pronájmu **měsíční nájem**), `MIN_AREA_M2` (byty/domy/chaty),
+  `MIN_LAND_AREA_M2` (plocha pozemku) — co hledat
 - `OKRESY`, `BEZREALITKY_KRAJ` — hrubá síť pro Sreality/Bezrealitky
 - `CENTER_LAT` / `CENTER_LON` / `RADIUS_KM` — přesné dofiltrování podle GPS
 - `CENTER_NAME`, `SEARCH_AREA_LABEL` — texty v e-mailu (pozor na skloňování: „km od **Písku**“)

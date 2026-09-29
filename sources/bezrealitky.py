@@ -4,7 +4,7 @@ Like Sreality, the site is a Next.js app; search results are dehydrated into
 `__NEXT_DATA__` under props.pageProps.apolloCache as `Advert:<id>` objects
 (Apollo's normalized cache). We read them straight from there — no GraphQL POST.
 
-We fetch the Karlovarský-kraj sale listing, paginate, then filter client-side
+We fetch the regional sale/rent listing, paginate, then filter client-side
 by disposition / price / GPS radius (radius applied later in the pipeline).
 """
 
@@ -16,15 +16,17 @@ import urllib.error
 import urllib.request
 from typing import Optional
 
-from config import BEZREALITKY_KRAJ, DISPOSITIONS, MAX_PRICE_CZK, PROPERTY_TYPES
+from config import (BEZREALITKY_KRAJ, DISPOSITIONS, MAX_PRICE_CZK, OFFER_TYPE,
+                    PROPERTY_TYPES)
 from models import Listing
 
 # Bezrealitky URL uses singular category slugs (no chaty category on this portal).
 _PROP_SLUGS = {
     "byty": "byt",
     "domy": "dum",
+    "pozemky": "pozemek",
 }
-LIST_ROOT = "https://www.bezrealitky.cz/vypis/nabidka-prodej"
+LIST_ROOT = f"https://www.bezrealitky.cz/vypis/nabidka-{OFFER_TYPE}"
 DETAIL = "https://www.bezrealitky.cz/nemovitosti-byty-domy"
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
@@ -98,7 +100,9 @@ def _to_listing(cache: dict, a: dict) -> Optional[Listing]:
     price = a.get("price")
     gps = a.get("gps") or {}
     lat, lng = gps.get("lat"), gps.get("lng")
-    surface = a.get("surface")
+    # Land has no floor area (surface is 0); its plot size is in surfaceLand.
+    surface = a.get("surface") or a.get("surfaceLand")
+    charges = a.get("charges")
     address = _first_keyed(a, "address(") or ""
     alt = _first_keyed(a, "imageAltText(")
     uri = a.get("uri")
@@ -106,12 +110,14 @@ def _to_listing(cache: dict, a: dict) -> Optional[Listing]:
     return Listing(
         source="bezrealitky",
         listing_id=f"bezrealitky:{a['id']}",
-        title=(alt or f"Prodej bytu {disp}").strip(),
+        title=(alt or f"{OFFER_TYPE.capitalize()} {disp}").strip(),
         price_czk=int(price) if isinstance(price, (int, float)) else None,
         disposition=disp,
         area_m2=int(surface) if isinstance(surface, (int, float)) and surface else None,
         city=address,
         district="",
+        charges_czk=(int(charges) if OFFER_TYPE == "pronajem"
+                     and isinstance(charges, (int, float)) and charges else None),
         url=f"{DETAIL}/{uri}" if uri else DETAIL,
         image_url=_image_url(cache, a),
         latitude=float(lat) if isinstance(lat, (int, float)) else None,
@@ -133,7 +139,7 @@ def _total_count(cache: dict) -> int:
 
 
 def fetch_listings(verbose: bool = False) -> list[Listing]:
-    """Fetch regional sale listings, filter to target disposition + budget.
+    """Fetch regional listings, filter to target disposition + budget.
 
     GPS radius is applied later by the pipeline. Fails gracefully per-page.
     """
@@ -172,7 +178,9 @@ def fetch_listings(verbose: bool = False) -> list[Listing]:
                     continue
                 if not lst or lst.listing_id in seen:
                     continue
-                if DISPOSITIONS and lst.disposition not in DISPOSITIONS:
+                lst.offer, lst.property_type = OFFER_TYPE, prop
+                if (prop == "byty" and DISPOSITIONS
+                        and lst.disposition not in DISPOSITIONS):
                     continue
                 if (MAX_PRICE_CZK is not None and lst.price_czk is not None
                         and lst.price_czk > MAX_PRICE_CZK):

@@ -64,6 +64,53 @@ class TestSrealityDispositions(unittest.TestCase):
             self.assertNotIn("velikost", sreality._search_url("byty", "pisek", 1))
 
 
+class TestSrealityLandAndRent(unittest.TestCase):
+    LAND = {
+        "id": 77, "name": "Prodej stavebního pozemku 860\xa0m²",
+        "categorySubCb": {"name": "Bydlení", "value": 19},
+        "priceCzk": 2000, "priceSummaryCzk": 1_720_000,
+        "priceUnitCb": {"name": "za m²", "value": 3},
+        "locality": {"city": "Kostelec", "citySeoName": "kostelec",
+                     "cityPartSeoName": "kostelec"},
+    }
+
+    def test_land_price_is_total_not_per_m2(self):
+        l = sreality._parse_item(self.LAND, "pozemek")
+        self.assertEqual(l.price_czk, 1_720_000)
+        self.assertEqual(l.area_m2, 860)
+        self.assertEqual(l.disposition, "Bydlení")
+        self.assertIn("/pozemek/bydleni/kostelec-kostelec/77", l.url)
+
+    def test_price_for_whole_property_is_kept(self):
+        item = dict(self.LAND, priceCzk=4_110_832, priceSummaryCzk=4_110_832,
+                    priceUnitCb={"name": "za nemovitost", "value": 1})
+        self.assertEqual(sreality._parse_item(item, "pozemek").price_czk, 4_110_832)
+
+    def test_pozemky_search_url(self):
+        self.assertIn("/pozemky/pisek", sreality._search_url("pozemky", "pisek", 1))
+
+    def test_dispositions_do_not_narrow_land_search(self):
+        with mock.patch.object(sreality, "DISPOSITIONS", ["2+kk"]):
+            self.assertNotIn("velikost", sreality._search_url("pozemky", "pisek", 1))
+            self.assertNotIn("velikost", sreality._search_url("domy", "pisek", 1))
+
+    def test_rent_url_and_detail(self):
+        search = "https://www.sreality.cz/hledani/pronajem"
+        detail = "https://www.sreality.cz/detail/pronajem"
+        with mock.patch.object(sreality, "SEARCH_ROOT", search), \
+                mock.patch.object(sreality, "DETAIL_ROOT", detail):
+            self.assertTrue(sreality._search_url("byty", "pisek", 1)
+                            .startswith(search + "/byty/pisek"))
+            item = {"id": 5, "name": "Pronájem bytu 2+kk 92\xa0m²",
+                    "categorySubCb": {"name": "2+kk"}, "priceCzk": 17000,
+                    "priceUnitCb": {"name": "za měsíc", "value": 2},
+                    "locality": {"citySeoName": "pisek",
+                                 "cityPartSeoName": "vnitrni-mesto"}}
+            l = sreality._parse_item(item, "byt")
+        self.assertEqual(l.price_czk, 17000)
+        self.assertIn("/detail/pronajem/byt/2+kk/pisek-vnitrni-mesto/5", l.url)
+
+
 class TestBezrealitky(unittest.TestCase):
     def test_disposition_mapping(self):
         self.assertEqual(bezrealitky._disposition("DISP_3_KK"), "3+kk")
@@ -117,6 +164,41 @@ class TestIdnes(unittest.TestCase):
         self.assertFalse(idnes._is_near("5. května, Milevsko, okres Písek"))
         self.assertTrue(idnes._is_near("Kollárova, Písek - Budějovické Předměstí"))
 
+    def test_area_with_thousands_separator(self):
+        card = (
+            'class="c-products__item"><a '
+            'href="https://reality.idnes.cz/detail/prodej/pozemek/krenovice/6a85aa/">'
+            '<span class="c-products__title">prodej pole 13 645 m² '
+            'Křenovice, okres Písek 682 250 Kč (50 Kč/m² )</span></a>'
+        )
+        l = next(idnes._parse_cards(card))
+        self.assertEqual(l.area_m2, 13_645)
+        self.assertEqual(l.price_czk, 682_250)
+        self.assertEqual(l.disposition, "pole")
+        self.assertIn("Křenovice", l.city)
+
+    def test_land_kind_from_genitive_title(self):
+        card = (
+            'class="c-products__item"><a '
+            'href="https://reality.idnes.cz/detail/prodej/pozemek/x/6a85bb/">'
+            '<span class="c-products__title">prodej stavebního pozemku 4 440 m² '
+            'Albrechtice, okres Písek 4 990 000 Kč</span></a>'
+        )
+        l = next(idnes._parse_cards(card))
+        self.assertEqual((l.disposition, l.area_m2), ("stavební", 4440))
+
+    def test_rent_card_area_not_glued_to_disposition(self):
+        # "3+1 57 m²" must be 57, not "1 57" -> 157
+        card = (
+            'class="c-products__item"><a '
+            'href="https://reality.idnes.cz/detail/pronajem/byt/pisek-x/6a85cc/">'
+            '<span class="c-products__title">pronájem bytu 3+1 57 m² '
+            'Velké náměstí, Písek - Vnitřní Město 14 500 Kč/měsíc</span></a>'
+        )
+        l = next(idnes._parse_cards(card))
+        self.assertEqual((l.disposition, l.area_m2, l.price_czk), ("3+1", 57, 14_500))
+        self.assertIn("/pronajem/", l.url)
+
     def test_parse_house_card_locality_after_plot_area(self):
         card = (
             'class="c-products__item"><a '
@@ -137,6 +219,27 @@ def _idnes_card(listing_id: str) -> str:
         '<span class="c-products__title">prodej bytu 2+kk 50 m² '
         'Centrum, Písek 3 490 000 Kč</span></a>'
     )
+
+
+class TestBezrealitkyLandAndRent(unittest.TestCase):
+    def test_land_area_comes_from_plot_size(self):
+        advert = {"id": "9", "estateType": "POZEMEK", "disposition": "UNDEFINED",
+                  "price": 5_050_000, "surface": 0, "surfaceLand": 2888,
+                  "gps": {"lat": 49.3, "lng": 14.1}, "uri": "9-prodej-pozemku"}
+        l = bezrealitky._to_listing({}, advert)
+        self.assertEqual((l.area_m2, l.price_czk, l.disposition), (2888, 5_050_000, ""))
+
+    def test_rent_keeps_charges(self):
+        advert = {"id": "8", "disposition": "DISP_2_1", "price": 13_000,
+                  "charges": 5_500, "surface": 46, "uri": "8-pronajem"}
+        with mock.patch.object(bezrealitky, "OFFER_TYPE", "pronajem"):
+            l = bezrealitky._to_listing({}, advert)
+        self.assertEqual((l.price_czk, l.charges_czk), (13_000, 5_500))
+
+    def test_sale_ignores_charges(self):
+        advert = {"id": "7", "disposition": "DISP_2_1", "price": 3_000_000,
+                  "charges": 900, "surface": 46, "uri": "7-prodej"}
+        self.assertIsNone(bezrealitky._to_listing({}, advert).charges_czk)
 
 
 class TestIdnesPaging(unittest.TestCase):

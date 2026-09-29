@@ -36,7 +36,8 @@ _load_dotenv()
 
 import dedup
 import email_report
-from config import CENTER_LAT, CENTER_LON, MIN_AREA_M2, RADIUS_KM
+from config import (CENTER_LAT, CENTER_LON, MIN_AREA_M2, MIN_LAND_AREA_M2,
+                    OFFER_TYPE, PROPERTY_TYPES, RADIUS_KM)
 from geo import haversine_km
 from models import Listing
 from sources.bezrealitky import fetch_listings as fetch_bezrealitky
@@ -75,15 +76,27 @@ def within_radius(listings: list[Listing]) -> list[Listing]:
 
 
 def meets_min_area(listings: list[Listing]) -> list[Listing]:
-    if MIN_AREA_M2 is None:
-        return listings
-    return [
-        l for l in listings
-        if l.area_m2 is None or l.area_m2 >= MIN_AREA_M2
-    ]
+    """Floor-area minimum for byty/domy/chaty, plot-area minimum for pozemky."""
+    def ok(l: Listing) -> bool:
+        limit = MIN_LAND_AREA_M2 if l.property_type == "pozemky" else MIN_AREA_M2
+        return limit is None or l.area_m2 is None or l.area_m2 >= limit
+    return [l for l in listings if ok(l)]
 
 
-# Same flat is often posted on multiple portals. Collapse exact matches on
+def check_config() -> None:
+    """Fail early with a readable message instead of scraping the wrong thing."""
+    if OFFER_TYPE not in ("prodej", "pronajem"):
+        raise SystemExit(
+            f'config.py: OFFER_TYPE musí být "prodej" nebo "pronajem", ne {OFFER_TYPE!r}.')
+    known = {"byty", "domy", "chaty", "pozemky"}
+    unknown = [p for p in PROPERTY_TYPES if p not in known]
+    if unknown or not PROPERTY_TYPES:
+        raise SystemExit(
+            f"config.py: PROPERTY_TYPES smí obsahovat jen {sorted(known)}, "
+            f"máš {PROPERTY_TYPES!r}.")
+
+
+# Same property is often posted on multiple portals. Collapse exact matches on
 # (disposition, area, price), keeping the no-commission source first.
 SOURCE_PRIORITY = {"bezrealitky": 0, "sreality": 1, "idnes": 2}
 
@@ -97,7 +110,10 @@ def collapse_cross_source(listings: list[Listing]) -> list[Listing]:
     for l in sorted(listings, key=lambda x: SOURCE_PRIORITY.get(x.source, 9)):
         # only collapse when we have enough to be confident it's the same flat
         if l.area_m2 and l.price_czk:
-            key = (l.disposition, l.area_m2, l.price_czk)
+            # Portals name land kinds differently ("Bydlení" / "pole" / ""), so
+            # for land only the plot area and price identify it.
+            kind = "" if l.property_type == "pozemky" else l.disposition
+            key = (l.property_type == "pozemky", kind, l.area_m2, l.price_czk)
         else:
             key = (l.listing_id,)
         sources = sources_per_key.setdefault(key, set())
@@ -109,6 +125,7 @@ def collapse_cross_source(listings: list[Listing]) -> list[Listing]:
 
 
 def main(dry_run: bool = False) -> None:
+    check_config()
     now = datetime.now()
     fetched = collect()
     near = within_radius(fetched)
@@ -116,6 +133,8 @@ def main(dry_run: bool = False) -> None:
     unique = collapse_cross_source(sized)
     new = dedup.filter_new(unique)
     area_note = f", min. {MIN_AREA_M2} m2" if MIN_AREA_M2 else ""
+    if "pozemky" in PROPERTY_TYPES and MIN_LAND_AREA_M2:
+        area_note += f" (pozemky min. {MIN_LAND_AREA_M2} m2)"
     print(f"\nCelkem: {len(fetched)} staženo · {len(near)} v okruhu {RADIUS_KM:.0f} km"
           f"{area_note} · {len(sized)} po filtru plochy · {len(unique)} unikátních · {len(new)} nových")
 

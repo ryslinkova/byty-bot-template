@@ -90,12 +90,18 @@ Zeptej se, co má hledat, a přepiš hodnoty. Default je Písek + 15 km, do 6 mi
 
 | Chce změnit | Uprav |
 |---|---|
-| typ nemovitosti | `PROPERTY_TYPES` (`byty`, `domy`, `chaty`) |
-| dispozici (jen byty) | `DISPOSITIONS`, prázdný seznam = všechny |
-| cenu / plochu | `MAX_PRICE_CZK`, `MIN_AREA_M2` (`None` = bez limitu) |
+| prodej, nebo pronájem | `OFFER_TYPE` (`"prodej"` / `"pronajem"`; jedno na bota) |
+| typ nemovitosti | `PROPERTY_TYPES` (`byty`, `domy`, `chaty`, `pozemky` — lze kombinovat) |
+| dispozici (jen byty) | `DISPOSITIONS`, prázdný seznam = všechny; víc dispozic najednou funguje |
+| cenu / plochu | `MAX_PRICE_CZK`, `MIN_AREA_M2` (byty/domy/chaty), `MIN_LAND_AREA_M2` (pozemky); `None` = bez limitu |
 | jinou oblast | `OKRESY`, `BEZREALITKY_KRAJ`, `CENTER_LAT`, `CENTER_LON`, `RADIUS_KM` |
 | texty v mailu | `CENTER_NAME`, `SEARCH_AREA_LABEL` |
 | obce pro iDNES | `IDNES_OKRESY`, `TOWNS_NEAR` |
+
+Na co si dát pozor u prodeje/pronájmu a typů:
+- Při `OFFER_TYPE = "pronajem"` je `MAX_PRICE_CZK` **měsíční nájem** (bez poplatků) — výchozích 6 000 000 přepiš, např. na 25 000. Zeptej se uživatele.
+- U `pozemky` je „plocha“ velikost celého pozemku, proto má vlastní limit `MIN_LAND_AREA_M2` (výchozí `None`); `MIN_AREA_M2` se na pozemky nevztahuje. `DISPOSITIONS` se vztahuje jen na byty.
+- Bezrealitky nemá kategorii chaty a pronájem chat či pozemků je řídký — portál bez výsledků prostě nic nevrátí, není to chyba.
 
 Na co si dát pozor při změně oblasti:
 - `OKRESY` a `BEZREALITKY_KRAJ` jsou **slugy z URL** daného portálu (`pisek`, `jihocesky-kraj`) — ověř si je tím, že si otevřeš odpovídající výpis na webu portálu.

@@ -4,17 +4,29 @@ Edit values here to retune the search; no need to touch source adapters.
 """
 
 # --- WHAT to look for ---------------------------------------------------------
-# Property categories to scrape (Sreality/iDNES plural slugs).
+# "prodej" (sale) or "pronajem" (rent). One or the other per bot; run a second
+# copy of the bot if you want both.
+OFFER_TYPE = "prodej"
+
+# Property categories to scrape: any of "byty", "domy", "chaty", "pozemky".
+# Rent is rare for "chaty" and "pozemky"; a portal with none just returns nothing.
 PROPERTY_TYPES: list[str] = ["byty", "domy", "chaty"]
 
-# Empty list = all dispositions (apartments only). Houses/cottages ignore this.
+# Empty list = all dispositions. Applies to "byty" only — houses, cottages and
+# land are never filtered by it.
 DISPOSITIONS: list[str] = []
 
-# Max sale price in CZK. None = no upper limit.
+# Max price in CZK: the sale price, or the MONTHLY rent when OFFER_TYPE is
+# "pronajem" (fees not included). None = no upper limit.
 MAX_PRICE_CZK: int | None = 6_000_000
 
-# Min usable area in m². None = no lower limit. Unknown area is kept.
+# Min usable area in m² for "byty", "domy" and "chaty". None = no lower limit.
+# Unknown area is kept.
 MIN_AREA_M2: int | None = 40
+
+# Min plot area in m² for "pozemky" (their area is the whole plot, so it gets its
+# own limit). None = no lower limit. Unknown area is kept.
+MIN_LAND_AREA_M2: int | None = None
 
 # --- WHERE to look ------------------------------------------------------------
 # Sreality okres (district) slugs — coarse net, refined to radius via GPS below.

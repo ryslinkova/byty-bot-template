@@ -20,15 +20,17 @@ import urllib.error
 import urllib.request
 from typing import Iterator
 
-from config import DISPOSITIONS, IDNES_OKRESY, MAX_PRICE_CZK, PROPERTY_TYPES, TOWNS_NEAR
+from config import (DISPOSITIONS, IDNES_OKRESY, MAX_PRICE_CZK, OFFER_TYPE,
+                    PROPERTY_TYPES, TOWNS_NEAR)
 from models import Listing
 
-SEARCH_ROOT = "https://reality.idnes.cz/s/prodej"
+SEARCH_ROOT = f"https://reality.idnes.cz/s/{OFFER_TYPE}"
 MAX_PAGES = 20  # safety cap per okres; paging usually ends much sooner
 
 # iDNES path segment per config property category (cottages live under a
 # combined "chaty-chalupy" listing; /chaty alone is a 404).
-_PROP_PATHS = {"byty": "byty", "domy": "domy", "chaty": "chaty-chalupy"}
+_PROP_PATHS = {"byty": "byty", "domy": "domy", "chaty": "chaty-chalupy",
+               "pozemky": "pozemky"}
 
 HEADERS = {
     "User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -43,16 +45,24 @@ HEADERS = {
 }
 
 _HREF_RE = re.compile(
-    r'href="(https://reality\.idnes\.cz/detail/prodej/(?:byt|dum|chata)/[^"]+)"')
+    r'href="(https://reality\.idnes\.cz/detail/(?:prodej|pronajem)/'
+    r'(?:byt|dum|chata|pozemek)/[^"]+)"')
 _DISP_RE = re.compile(r"(\d\+(?:kk|\d))", re.I)
-_AREA_RE = re.compile(r"(\d+)\s*m²")
+# Thousands are space-separated ("13 645 m²"); a plain \d+ would read that as 645.
+_AREA_RE = re.compile(r"(?<![\d+])(\d[\d\s ]*?)\s*m²")
+# Land titles read "prodej pole 13 645 m² ..." — the word(s) before the area.
+_LAND_KIND_RE = re.compile(r"^(?:prodej|pronájem)\s+(?:pozemku\s+)?(.*?)\s*\d", re.I)
+# iDNES words the kind in genitive ("stavebního pozemku"); show it as a plain kind.
+_LAND_KINDS = {"stavebního pozemku": "stavební", "stavebního": "stavební",
+               "zahrady": "zahrada", "louky": "louka", "lesa": "les",
+               "komerčního pozemku": "komerční", "komerčního": "komerční"}
 _PRICE_RE = re.compile(r"([\d\s ]+)\s*Kč")
 # Locality sits between the LAST "m²" and the price (houses list two areas:
 # "domu 120 m² s pozemkem 900 m² Obec, okres X").
 _LOC_RE = re.compile(r"m²\s*((?:(?!m²).)+?)\s+[\d ][\d\s ]*Kč")
 _OKRES_RE = re.compile(r",?\s*okres\s.*$", re.I)
 _ID_RE = re.compile(
-    r"/detail/prodej/(?:byt|dum|chata)/[^/]+/([0-9a-fA-F]+)")
+    r"/detail/(?:prodej|pronajem)/(?:byt|dum|chata|pozemek)/[^/]+/([0-9a-fA-F]+)")
 
 
 class SourceError(RuntimeError):
@@ -146,6 +156,10 @@ def _parse_cards(html: str) -> Iterator[Listing]:
             continue
 
         disp = disp_m.group(1).lower() if disp_m else ""
+        if not disp and "/pozemek/" in url:
+            kind_m = _LAND_KIND_RE.match(seg)
+            raw = kind_m.group(1).strip().lower() if kind_m else ""
+            disp = _LAND_KINDS.get(raw, raw)
         area_m = _AREA_RE.search(seg)
         price_m = _PRICE_RE.search(seg)
         loc_m = _LOC_RE.search(seg)
@@ -153,13 +167,14 @@ def _parse_cards(html: str) -> Iterator[Listing]:
         if price_m:
             digits = re.sub(r"\D", "", price_m.group(1))
             price = int(digits) if digits else None
-        area = int(area_m.group(1)) if area_m else None
+        area_digits = re.sub(r"\D", "", area_m.group(1)) if area_m else ""
+        area = int(area_digits) if area_digits else None
         locality = loc_m.group(1).strip() if loc_m else ""
 
         yield Listing(
             source="idnes",
             listing_id=f"idnes:{id_m.group(1)}",
-            title=seg[:120] if seg else "Nemovitost k prodeji",
+            title=seg[:120] if seg else "Nemovitost",
             price_czk=price,
             disposition=disp,
             area_m2=area,
@@ -218,7 +233,9 @@ def fetch_listings(verbose: bool = False) -> list[Listing]:
                 for lst in cards:
                     if lst.listing_id in seen:
                         continue
-                    if DISPOSITIONS and lst.disposition not in DISPOSITIONS:
+                    lst.offer, lst.property_type = OFFER_TYPE, prop
+                    if (prop == "byty" and DISPOSITIONS
+                            and lst.disposition not in DISPOSITIONS):
                         continue
                     if (MAX_PRICE_CZK is not None and lst.price_czk is not None
                             and lst.price_czk > MAX_PRICE_CZK):

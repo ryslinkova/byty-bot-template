@@ -15,7 +15,8 @@ from email.message import EmailMessage
 from html import escape
 from pathlib import Path
 
-from config import CENTER_NAME, RADIUS_KM, RECIPIENT_EMAILS, SEARCH_AREA_LABEL
+from config import (CENTER_NAME, OFFER_TYPE, RADIUS_KM, RECIPIENT_EMAILS,
+                    SEARCH_AREA_LABEL)
 from models import Listing
 
 SOURCE_LABELS = {
@@ -27,12 +28,34 @@ SOURCE_LABELS = {
 
 # --- formatting helpers -------------------------------------------------------
 
+NBSP = " "
+IS_RENT = OFFER_TYPE == "pronajem"
+
+
+def _fmt_num(n) -> str:
+    return f"{n:,}".replace(",", NBSP)
+
+
 def _fmt_price(p):
-    return f"{p:,} Kč".replace(",", " ") if p else "cena neuvedena"
+    return f"{_fmt_num(p)} Kč" if p else "cena neuvedena"
 
 
 def _price_line(l: Listing) -> str:
-    return _fmt_price(l.price_czk)
+    if not l.price_czk:
+        return _fmt_price(None)
+    if l.offer != "pronajem":
+        return _fmt_price(l.price_czk)
+    line = f"{_fmt_price(l.price_czk)}/měsíc"
+    if l.charges_czk:
+        line += f" + {_fmt_num(l.charges_czk)} Kč poplatky"
+    return line
+
+
+def _kind(l: Listing) -> str:
+    """Disposition for flats/houses; 'Pozemek – pole' for land."""
+    if l.property_type == "pozemky":
+        return f"Pozemek – {l.disposition.lower()}" if l.disposition else "Pozemek"
+    return l.disposition
 
 
 def _czech_count(n: int) -> str:
@@ -52,8 +75,8 @@ def build_subject(listings: list[Listing], when: datetime) -> str:
 
 def _listing_card(l: Listing) -> str:
     dist = f"{l.distance_km:.1f} km od {CENTER_NAME}" if l.distance_km is not None else ""
-    area = f"{l.area_m2} m²" if l.area_m2 else "? m²"
-    meta = " · ".join(x for x in (l.disposition, area, _price_line(l)) if x)
+    area = f"{_fmt_num(l.area_m2)}{NBSP}m²" if l.area_m2 else "? m²"
+    meta = " · ".join(x for x in (_kind(l), area, _price_line(l)) if x)
     loc = " · ".join(x for x in (escape(l.city or ""), dist) if x)
     district = escape(l.district or "")
 
@@ -108,13 +131,13 @@ def build_html(listings: list[Listing], when: datetime) -> str:
              style="max-width:600px;background:#fff;border-radius:14px;padding:22px;
              font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
         <tr><td>
-          <div style="font-size:20px;font-weight:700;color:#111;">Nové nemovitosti k prodeji</div>
+          <div style="font-size:20px;font-weight:700;color:#111;">Nové nemovitosti {"k pronájmu" if IS_RENT else "k prodeji"}</div>
           <div style="font-size:13px;color:#888;margin-top:4px;">
-            {when.day}.{when.month}.{when.year} · prodej · do {RADIUS_KM:.0f} km od {SEARCH_AREA_LABEL}
+            {when.day}.{when.month}.{when.year} · {"pronájem" if IS_RENT else "prodej"} · do {RADIUS_KM:.0f} km od {SEARCH_AREA_LABEL}
           </div>
           {body}
           <div style="font-size:11px;color:#bbb;margin-top:24px;border-top:1px solid #eee;padding-top:12px;">
-            Prodejní cena dle inzerátu. Generováno botem byty-bot.
+            {"Měsíční nájem dle inzerátu, poplatky mohou být uvedeny zvlášť." if IS_RENT else "Prodejní cena dle inzerátu."} Generováno botem byty-bot.
           </div>
         </td></tr>
       </table>

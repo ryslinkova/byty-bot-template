@@ -7,7 +7,11 @@ from pathlib import Path
 import dedup
 from config import MIN_AREA_M2
 from geo import haversine_km
-from main import collapse_cross_source, meets_min_area
+from unittest import mock
+
+import email_report
+import main
+from main import check_config, collapse_cross_source, meets_min_area
 from models import Listing
 
 
@@ -60,6 +64,72 @@ class TestMinArea(unittest.TestCase):
     def test_keeps_unknown_area(self):
         unknown = _mk(lid="u", area=None)
         self.assertEqual(meets_min_area([unknown]), [unknown])
+
+
+def _land(source="sreality", lid="l", price=900_000, kind="Pole", area=12_000):
+    l = _mk(source=source, lid=lid, price=price, disp=kind, area=area)
+    l.property_type = "pozemky"
+    return l
+
+
+class TestLand(unittest.TestCase):
+    def test_land_uses_its_own_min_area(self):
+        small_plot, big_plot = _land(lid="a", area=500), _land(lid="b")
+        flat = _mk(lid="f", area=50)
+        with mock.patch.object(main, "MIN_LAND_AREA_M2", 1000):
+            out = meets_min_area([small_plot, big_plot, flat])
+        self.assertEqual({l.listing_id for l in out}, {"sreality:b", "sreality:f"})
+
+    def test_land_ignores_flat_area_minimum(self):
+        # a 30 m² plot must not be dropped by the 40 m² flat limit
+        with mock.patch.object(main, "MIN_LAND_AREA_M2", None):
+            self.assertEqual(len(meets_min_area([_land(area=30)])), 1)
+
+    def test_same_plot_on_two_portals_collapses_despite_different_kind(self):
+        out = collapse_cross_source([
+            _land(source="sreality", lid="s", kind="Bydlení", area=4440, price=4_990_000),
+            _land(source="idnes", lid="i", kind="stavební", area=4440, price=4_990_000),
+        ])
+        self.assertEqual(len(out), 1)
+
+    def test_plot_and_flat_with_equal_numbers_are_not_the_same(self):
+        flat = _mk(source="sreality", lid="f", price=900_000, area=60, disp="")
+        plot = _land(source="idnes", lid="p", price=900_000, area=60, kind="")
+        self.assertEqual(len(collapse_cross_source([flat, plot])), 2)
+
+
+class TestConfigCheck(unittest.TestCase):
+    def test_bad_offer_type(self):
+        with mock.patch.object(main, "OFFER_TYPE", "koupe"):
+            with self.assertRaises(SystemExit):
+                check_config()
+
+    def test_unknown_property_type(self):
+        with mock.patch.object(main, "PROPERTY_TYPES", ["byty", "hrady"]):
+            with self.assertRaises(SystemExit):
+                check_config()
+
+    def test_default_config_is_valid(self):
+        check_config()
+
+
+class TestEmailFormatting(unittest.TestCase):
+    def test_land_line(self):
+        l = _land(kind="Pole", area=93_428, price=4_110_832)
+        card = email_report._listing_card(l)
+        self.assertIn("Pozemek – pole", card)
+        self.assertIn("93\u00a0428\u00a0m²", card)
+        self.assertIn("4\u00a0110\u00a0832 Kč", card)
+
+    def test_rent_shows_month_and_charges(self):
+        l = _mk(price=13_000)
+        l.offer, l.charges_czk = "pronajem", 5_500
+        line = email_report._price_line(l)
+        self.assertIn("13\u00a0000 Kč/měsíc", line)
+        self.assertIn("5\u00a0500 Kč poplatky", line)
+
+    def test_sale_price_has_no_month(self):
+        self.assertNotIn("měsíc", email_report._price_line(_mk()))
 
 
 class TestCrossSourceCollapse(unittest.TestCase):
