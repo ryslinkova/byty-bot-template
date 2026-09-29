@@ -17,8 +17,10 @@ ať to funguje i v nástrojích, které hledají vlastní jméno souboru.
   že si ho má v chatu považovat za prozrazený a případně vygenerovat nový.
 - **Necommituj ani nepushuj do repa šablony.** Tohle repo je sdílená šablona
   (`ryslinkova/byty-bot-template`). Uživatel ho nemá upravovat přímo — nejdřív si z něj
-  udělá vlastní fork (viz „Krok 0"). Před jakýmkoli `git push` ověř přes
-  `git remote -v`, že `origin` míří na uživatelův vlastní fork, ne na šablonu.
+  přes **Use this template** vytvoří vlastní soukromé repo (viz „Krok 0"). Před jakýmkoli
+  `git push` ověř přes `git remote -v`, že `origin` míří na jeho vlastní repo, ne na šablonu.
+- **Nedělej fork.** Fork veřejného repa je vždycky veřejný (a soukromý z něj udělat nejde),
+  takže by každý viděl, kde a za kolik uživatel hledá bydlení (`config.py`).
 - Mluv česky, pokud uživatel nezačne jinak.
 - Než něco spustíš, řekni jednou větou co to udělá a zda to něco odešle.
 
@@ -35,24 +37,30 @@ Soubory: `main.py` (orchestrace) · `config.py` (veškeré nastavení) ·
 
 ## Průvodce nastavením — pořadí kroků
 
-### 0. Vlastní fork šablony
+### 0. Vlastní soukromá kopie šablony
 Když `git remote -v` ukazuje `ryslinkova/byty-bot-template` jako `origin`, uživatel je
-v šabloně a musí si z ní udělat vlastní fork. Nastavení (secrets, Actions, `config.py`)
-patří do jeho forku.
+v šabloně a musí si z ní vytvořit vlastní repo. Nastavení (secrets, Actions, `config.py`)
+patří do jeho repa.
+
+Proč ne fork: fork veřejného repa je vždycky veřejný, takže by byl vidět jeho `config.py`
+(souřadnice, cena). A ve veřejném repu GitHub po 60 dnech bez aktivity sám vypne
+naplánované běhy — bot by tiše přestal posílat maily.
 
 1. Zjisti, zda má `gh` (`gh auth status`). Když ne, pošli ho na <https://cli.github.com>
    a nech ho přihlásit (`gh auth login`).
-2. Forkni šablonu na jeho účet a stáhni ji:
+2. Vytvoř z šablony **soukromé** repo na jeho účtu a stáhni ho:
    ```bash
-   gh repo fork ryslinkova/byty-bot-template --clone
-   cd byty-bot-template
-   git remote -v   # origin = jeho fork, upstream = šablona
+   gh repo create byty-bot --template ryslinkova/byty-bot-template --private --clone
+   cd byty-bot
+   git remote -v   # origin = jeho vlastní repo
    ```
-   (Bez `gh`: na stránce šablony tlačítko **Fork**, pak `git clone` svého forku.)
-3. Od teď pracuj jen v jeho forku. Fork zůstane soukromý, pokud je soukromá šablona.
-4. Novější verzi šablony si stáhne přes `gh repo sync` (nebo tlačítkem **Sync fork**
-   na GitHubu). Před syncem řekni, že se může přepsat jeho `config.py`, pokud se
-   změnil i v šabloně — případný konflikt vyřeš s ním.
+   (Bez `gh`: na stránce šablony tlačítko **Use this template → Create a new repository**,
+   zvolit **Private**, pak `git clone` svého nového repa.)
+3. Od teď pracuj jen v jeho repu.
+4. Kopie ze šablony nemá se šablonou propojenou historii, takže tlačítko „Sync fork“
+   neexistuje. Když portál změní stránku a v šabloně vyjde oprava, stáhni ručně
+   opravené soubory (typicky `sources/*.py`) ze šablony a přepiš je v jeho repu.
+   Jeho `config.py` nikdy nepřepisuj.
 
 ### 1. Python
 Ověř `python3 --version` (potřeba 3.12+; na Windows zkus i `python --version` a `py -3 --version`).
@@ -115,12 +123,12 @@ Odešle mail **a zapíše inzeráty do `seen.db`** — podruhé už se stejné n
 ### 7. Automatický provoz (nepovinné, ale o to většinou jde)
 Bez tohohle si musí bota pouštět ručně. Přes GitHub Actions poběží sám dvakrát denně.
 
-1. Uživatel potřebuje **vlastní fork** na svém GitHub účtu — ten z kroku 0.
+1. Uživatel potřebuje **vlastní soukromé repo** na svém GitHub účtu — to z kroku 0.
    Do repa šablony secrets nastavit nemůže.
 2. V jeho repu: **Settings → Secrets and variables → Actions → New repository secret**,
    třikrát: `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `REPORT_RECIPIENT`.
    (Stejné hodnoty jako v `.env`. `.env` se do GitHubu nenahrává.)
-3. Záložka **Actions** → u forku jsou workflowy defaultně vypnuté, musí je povolit tlačítkem.
+3. Záložka **Actions** → když GitHub ukáže, že jsou workflowy vypnuté, musí je povolit tlačítkem.
 4. Workflow „Denní přehled bytů“ → **Run workflow** → ruční první běh. Nech ho zkontrolovat,
    že mail dorazil, a v logu běhu ukaž, kde se případná chyba objeví.
 5. Dál běží podle cronu v `.github/workflows/daily.yml`: 5:00 a 17:00 UTC

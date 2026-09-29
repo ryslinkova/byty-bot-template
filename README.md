@@ -24,7 +24,7 @@ Stejná nemovitost na více portálech se v mailu slučuje (priorita: Bezrealitk
 ## Rychlý start
 
 ```bash
-git clone <tenhle repozitář>
+gh repo create byty-bot --template ryslinkova/byty-bot-template --private --clone
 cd byty-bot
 cp .env.example .env        # a vyplň hodnoty (viz níže)
 python3 main.py --dry-run   # vytvoří preview_email.html, nic neodešle
@@ -58,10 +58,11 @@ Lokálně přes `.env` (viz `.env.example`), v CI přes GitHub Secrets.
 `.github/workflows/daily.yml` spouští bota dvakrát denně v 5:00 a 17:00 UTC
 (7:00 a 19:00 v létě, 6:00 a 18:00 v zimě). Pro vlastní provoz:
 
-1. Forkni / naklonuj repo do svého účtu.
+1. Vytvoř si z šablony vlastní **soukromé** repo (**Use this template** → Private).
+   Ne fork — fork veřejného repa je vždycky veřejný i s tvým `config.py`.
 2. Settings → Secrets and variables → Actions → přidej `GMAIL_USER`,
    `GMAIL_APP_PASSWORD` a `REPORT_RECIPIENT`.
-3. Actions → povol workflowy (u forku je GitHub defaultně vypíná).
+3. Actions → když jsou workflowy vypnuté, povol je.
 4. První běh spusť ručně přes **Run workflow**.
 
 Dedup databáze `seen.db` (co už bylo odesláno) nemá kde v Actions přežít mezi běhy,
