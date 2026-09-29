@@ -1,6 +1,7 @@
 """Tests for the three source parsers. Offline — fixtures mimic real payloads."""
 
 import unittest
+from unittest import mock
 
 from sources import bezrealitky, idnes, sreality
 
@@ -114,6 +115,51 @@ class TestIdnes(unittest.TestCase):
         l = next(idnes._parse_cards(card))
         self.assertEqual(l.city, "Zelenohorská, Protivín, okres Písek")
         self.assertEqual(l.area_m2, 120)
+
+
+def _idnes_card(listing_id: str) -> str:
+    return (
+        'class="c-products__item"><a '
+        f'href="https://reality.idnes.cz/detail/prodej/byt/pisek/{listing_id}/">'
+        '<span class="c-products__title">prodej bytu 2+kk 50 m² '
+        'Centrum, Písek 3 490 000 Kč</span></a>'
+    )
+
+
+class TestIdnesPaging(unittest.TestCase):
+    """iDNES paging is 0-indexed (first page has no ?page) and past the last
+    page it serves the last page again instead of a 404."""
+
+    ROOT = f"{idnes.SEARCH_ROOT}/byty/okres-pisek/"
+    PORTAL = {
+        ROOT: _idnes_card("aa01") + _idnes_card("aa02"),
+        ROOT + "?page=1": _idnes_card("bb01"),
+        ROOT + "?page=2": _idnes_card("bb01"),  # repeat of the last page
+    }
+
+    def _run(self):
+        fetched: list[str] = []
+
+        def fake_fetch(url):
+            fetched.append(url)
+            if url not in self.PORTAL:
+                raise idnes.NoSuchPage(url)
+            return self.PORTAL[url]
+
+        with mock.patch.object(idnes, "_fetch", side_effect=fake_fetch), \
+                mock.patch.object(idnes, "PROPERTY_TYPES", ["byty"]), \
+                mock.patch.object(idnes, "IDNES_OKRESY", ["okres-pisek"]), \
+                mock.patch.object(idnes.time, "sleep"):
+            listings = idnes.fetch_listings()
+        return {l.listing_id for l in listings}, fetched
+
+    def test_fetch_listings_includes_first_page(self):
+        ids, _ = self._run()
+        self.assertEqual(ids, {"idnes:aa01", "idnes:aa02", "idnes:bb01"})
+
+    def test_fetch_listings_stops_when_page_repeats(self):
+        _, fetched = self._run()
+        self.assertEqual(fetched, [self.ROOT, self.ROOT + "?page=1", self.ROOT + "?page=2"])
 
 
 if __name__ == "__main__":

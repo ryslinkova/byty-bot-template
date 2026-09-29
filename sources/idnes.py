@@ -24,7 +24,7 @@ from config import DISPOSITIONS, IDNES_OKRESY, MAX_PRICE_CZK, PROPERTY_TYPES, TO
 from models import Listing
 
 SEARCH_ROOT = "https://reality.idnes.cz/s/prodej"
-MAX_PAGES = 20  # safety cap per okres; paging usually ends on a 404 sooner
+MAX_PAGES = 20  # safety cap per okres; paging usually ends much sooner
 
 # iDNES path segment per config property category (cottages live under a
 # combined "chaty-chalupy" listing; /chaty alone is a 404).
@@ -184,10 +184,17 @@ def fetch_listings(verbose: bool = False) -> list[Listing]:
                 print(f"  ! iDNES: neznámý typ {prop!r}, přeskakuji")
             continue
         for okres in IDNES_OKRESY:
-            for page in range(1, MAX_PAGES + 1):
-                if out or page > 1:
+            # Paging is 0-indexed and the first page carries no ?page (the
+            # newest listings live there). Past the last page iDNES serves the
+            # last page again instead of a 404, so we stop on a page that
+            # brings no id we haven't already seen in this okres.
+            ids_in_okres: set[str] = set()
+            for page in range(MAX_PAGES):
+                if out or page > 0:
                     time.sleep(0.7)  # be polite; avoids connection resets
-                url = f"{SEARCH_ROOT}/{search_slug}/{okres}/?page={page}"
+                url = f"{SEARCH_ROOT}/{search_slug}/{okres}/"
+                if page:
+                    url += f"?page={page}"
                 try:
                     html = _fetch(url)
                 except NoSuchPage:
@@ -203,8 +210,10 @@ def fetch_listings(verbose: bool = False) -> list[Listing]:
                     continue
 
                 cards = list(_parse_cards(html))
-                if not cards:
+                page_ids = {c.listing_id for c in cards}
+                if not page_ids - ids_in_okres:
                     break
+                ids_in_okres |= page_ids
 
                 for lst in cards:
                     if lst.listing_id in seen:
@@ -219,7 +228,7 @@ def fetch_listings(verbose: bool = False) -> list[Listing]:
                     seen.add(lst.listing_id)
                     out.append(lst)
 
-                if page == MAX_PAGES and verbose:
+                if page == MAX_PAGES - 1 and verbose:
                     print(f"  i iDNES {search_slug}/{okres}: dosažen strop {MAX_PAGES} stran "
                           f"(další výsledky mohou být vynechány)")
 
