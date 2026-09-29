@@ -17,6 +17,8 @@ concurrency:
 
 jobs:
   run:
+    # V samotné šabloně nejsou secrets — běh by jen padal. Uživatelova kopie ho pustí normálně.
+    if: github.repository != 'ryslinkova/byty-bot-template'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

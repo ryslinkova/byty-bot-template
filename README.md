@@ -11,6 +11,25 @@ Bez závislostí — čistá standardní knihovna Pythonu (3.12+).
 > nebo otevři složku ve svém AI nástroji (Claude Code, Cursor, Copilot, Codex…)
 > a napiš „proveď mě nastavením“ — návod je psaný tak, aby tě jím agent provedl.
 
+## Autoři
+
+Původní autorkou bota je **[@MarketaAnt](https://github.com/MarketaAnt)** —
+postavila celou kostru: datový model, parsery všech tří portálů, dedup přes SQLite,
+skládání HTML e-mailu i běh v GitHub Actions s databází uloženou jako asset releasu.
+
+**[@ryslinkova](https://github.com/ryslinkova)** verzi rozvinula do dnešní podoby:
+
+- přepnutí z pronájmů na **prodej** a rozšíření na byty, domy i chaty,
+- zobecnění filtrů — cena, minimální plocha, radius hledání v km,
+- oprava obrázků ze Sreality v e-mailu (CDN vyžaduje `fl` parametry v URL),
+- načítání `.env` při lokálním spuštění,
+- allowlist obcí pro iDNES, který nemá v inzerátech GPS,
+- víc příjemců přehledu najednou (`REPORT_RECIPIENT` oddělený čárkami),
+- spouštění dvakrát denně místo jednou,
+- tahle sdílená verze: nastavení oddělené od přístupových údajů a průvodce nastavením v `AGENTS.md`.
+
+Na obou stranách u toho asistoval Claude (Claude Code / Cursor).
+
 ## Zdroje
 
 | Zdroj | Metoda | Geo filtr |
@@ -67,22 +86,3 @@ Lokálně přes `.env` (viz `.env.example`), v CI přes GitHub Secrets.
 
 Dedup databáze `seen.db` (co už bylo odesláno) nemá kde v Actions přežít mezi běhy,
 proto se ukládá jako asset v releasu `db-store` — workflow si ho sám vytvoří.
-
-## Autoři
-
-Původní autorkou bota je **[@MarketaAnt](https://github.com/MarketaAnt)** —
-postavila celou kostru: datový model, parsery všech tří portálů, dedup přes SQLite,
-skládání HTML e-mailu i běh v GitHub Actions s databází uloženou jako asset releasu.
-
-**[@ryslinkova](https://github.com/ryslinkova)** verzi rozvinula do dnešní podoby:
-
-- přepnutí z pronájmů na **prodej** a rozšíření na byty, domy i chaty,
-- zobecnění filtrů — cena, minimální plocha, radius hledání v km,
-- oprava obrázků ze Sreality v e-mailu (CDN vyžaduje `fl` parametry v URL),
-- načítání `.env` při lokálním spuštění,
-- allowlist obcí pro iDNES, který nemá v inzerátech GPS,
-- víc příjemců přehledu najednou (`REPORT_RECIPIENT` oddělený čárkami),
-- spouštění dvakrát denně místo jednou,
-- tahle sdílená verze: nastavení oddělené od přístupových údajů a průvodce nastavením v `AGENTS.md`.
-
-Na obou stranách u toho asistoval Claude (Claude Code / Cursor).
