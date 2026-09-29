@@ -54,7 +54,9 @@ class SourceError(RuntimeError):
 def _velikost_qs() -> str:
     if not DISPOSITIONS:
         return ""
-    return "&".join("velikost=" + d.replace("+", "%2B") for d in DISPOSITIONS)
+    # Sreality takes several sizes comma-separated in ONE parameter; a repeated
+    # `velikost=` is silently reduced to the first value.
+    return "velikost=" + ",".join(d.replace("+", "%2B") for d in DISPOSITIONS)
 
 
 def _search_url(prop: str, okres: str, page: int) -> str:

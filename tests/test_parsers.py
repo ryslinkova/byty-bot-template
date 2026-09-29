@@ -51,6 +51,19 @@ class TestSreality(unittest.TestCase):
         self.assertIsNone(sreality._parse_item(item, "byt").price_czk)
 
 
+class TestSrealityDispositions(unittest.TestCase):
+    def test_multiple_dispositions_in_one_param(self):
+        # A repeated `velikost=` makes Sreality return only the first size.
+        with mock.patch.object(sreality, "DISPOSITIONS", ["2+kk", "3+kk"]):
+            url = sreality._search_url("byty", "pisek", 1)
+        self.assertEqual(url.count("velikost="), 1)
+        self.assertIn("velikost=2%2Bkk,3%2Bkk", url)
+
+    def test_no_dispositions_no_param(self):
+        with mock.patch.object(sreality, "DISPOSITIONS", []):
+            self.assertNotIn("velikost", sreality._search_url("byty", "pisek", 1))
+
+
 class TestBezrealitky(unittest.TestCase):
     def test_disposition_mapping(self):
         self.assertEqual(bezrealitky._disposition("DISP_3_KK"), "3+kk")
