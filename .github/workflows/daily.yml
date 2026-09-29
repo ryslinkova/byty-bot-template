@@ -4,7 +4,7 @@ on:
   schedule:
     # 05:00 a 17:00 UTC = 07:00 a 19:00 v létě (CEST),
     # 06:00 a 18:00 v zimě (CET).
-    - cron: "0 5,17 * * *"
+    - cron: "23 5,17 * * *"
   workflow_dispatch: {}   # umožní spustit ručně tlačítkem v záložce Actions
 
 # Potřeba pro ukládání dedup DB jako Release asset.

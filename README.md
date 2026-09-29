@@ -86,3 +86,11 @@ Lokálně přes `.env` (viz `.env.example`), v CI přes GitHub Secrets.
 
 Dedup databáze `seen.db` (co už bylo odesláno) nemá kde v Actions přežít mezi běhy,
 proto se ukládá jako asset v releasu `db-store` — workflow si ho sám vytvoří.
+
+## Známé problémy
+
+- **Zpožděné spouštění na GitHub Actions.** GitHub naplánované (`cron`) běhy v době vysoké
+  zátěže odkládá, zvlášť na začátku hodiny. Tester naměřil zpoždění až 5 hodin, mail tedy
+  dorazí později, než je v `daily.yml` nastaveno. Nic se neztratí, jen přijde pozdě.
+  Případná náprava: posunout minutu v cronu na neokrouhlou hodnotu (např. `"23 5,17 * * *"`),
+  nebo bota provozovat mimo GitHub (např. Railway s volume pro `seen.db`).
